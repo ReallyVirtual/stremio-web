@@ -10,21 +10,22 @@ type FilterableStream = {
     behaviorHints?: { videoSize?: number | null } | null;
 };
 
+// Bounds are in GB and seeds; null means unbounded.
 export type StreamFilters = {
-    size: string;
-    seeds: string;
+    sizeMin: number | null;
+    sizeMax: number | null;
+    seedsMin: number | null;
+    seedsMax: number | null;
     language: string;
-};
-
-export type StreamFilterOption = {
-    value: string;
-    labelKey: string;
-    labelDefault: string;
-    labelValues?: Record<string, number>;
+    panelOpen: boolean;
 };
 
 export const ANY_KEY = 'ANY';
 export const MULTI_LANGUAGE_KEY = 'MULTI';
+
+// Stops of the two range sliders; the last one stands for "no limit".
+export const SIZE_STOPS = [0, 0.5, 1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24, 32, Infinity];
+export const SEEDS_STOPS = [0, 5, 10, 20, 50, 100, 200, 500, 1000, Infinity];
 
 const STORAGE_KEY = 'streamsListFilters';
 const GB = 1024 * 1024 * 1024;
@@ -35,33 +36,14 @@ const SIZE_UNITS: Record<string, number> = {
     tb: GB * 1024,
 };
 
-const DEFAULT_FILTERS: StreamFilters = { size: ANY_KEY, seeds: ANY_KEY, language: ANY_KEY };
-
-export const SIZE_OPTIONS: StreamFilterOption[] = [
-    { value: ANY_KEY, labelKey: 'STREAMS_FILTER_SIZE_ANY', labelDefault: 'Any size' },
-    ...[1, 2, 4, 8].map((size) => ({
-        value: `MAX_${size}`,
-        labelKey: 'STREAMS_FILTER_SIZE_MAX',
-        labelDefault: 'Under {{size}} GB',
-        labelValues: { size },
-    })),
-    ...[4, 8].map((size) => ({
-        value: `MIN_${size}`,
-        labelKey: 'STREAMS_FILTER_SIZE_MIN',
-        labelDefault: 'Over {{size}} GB',
-        labelValues: { size },
-    })),
-];
-
-export const SEEDS_OPTIONS: StreamFilterOption[] = [
-    { value: ANY_KEY, labelKey: 'STREAMS_FILTER_SEEDS_ANY', labelDefault: 'Any seeds' },
-    ...[5, 20, 50, 100].map((count) => ({
-        value: `MIN_${count}`,
-        labelKey: 'STREAMS_FILTER_SEEDS_MIN',
-        labelDefault: '{{count}}+ seeds',
-        labelValues: { count },
-    })),
-];
+export const DEFAULT_FILTERS: StreamFilters = {
+    sizeMin: null,
+    sizeMax: null,
+    seedsMin: null,
+    seedsMax: null,
+    language: ANY_KEY,
+    panelOpen: false,
+};
 
 // Addons have no structured seed field and most skip behaviorHints.videoSize,
 // so both values are taken from the description text when needed.
@@ -75,8 +57,8 @@ const SEEDS_PATTERNS = [
 
 // Languages: addons tag them as flag emojis (Torrentio: 🇬🇧 / 🇮🇹), as names (MediaFusion,
 // Comet: "Hindi", "Multi") or as "Dual Audio". Values are ISO 639-2 codes from `langs`, so
-// labels come from the same table the player settings use. Untagged streams (most English-only
-// torrents) have no language and are hidden once a specific language is chosen.
+// labels come from the same table the player settings use. Streams without any tag are
+// never hidden by the language filter.
 const FLAG_LANGUAGES: Record<string, string> = {
     GB: 'en', US: 'en', AU: 'en', CA: 'en', NZ: 'en', IE: 'en',
     ES: 'es', MX: 'es', AR: 'es', CO: 'es', CL: 'es',
@@ -89,6 +71,12 @@ const FLAG_LANGUAGES: Record<string, string> = {
     IL: 'he', IR: 'fa', TH: 'th', VN: 'vi', ID: 'id', MY: 'ms', PK: 'ur', BD: 'bn', BG: 'bg',
     HR: 'hr', RS: 'sr', SK: 'sk', SI: 'sl', LT: 'lt', LV: 'lv', EE: 'et',
 };
+// Flag shown next to a language in the dropdown: the first country listed for it above,
+// plus the Indian languages that have no country of their own in that table.
+const LANGUAGE_COUNTRIES: Record<string, string> = Object.entries(FLAG_LANGUAGES)
+    .reduce((countries, [country, language]) => ({ [language]: country, ...countries }), {
+        ta: 'IN', te: 'IN', ml: 'IN', kn: 'IN', mr: 'IN', pa: 'IN',
+    });
 const FLAG_PATTERN = /[\u{1F1E6}-\u{1F1FF}]{2}/gu;
 const REGIONAL_INDICATOR_BASE = 0x1F1E6;
 const SHORT_NAMES_ALLOWED = ['Thai', 'Urdu', 'Zulu'];
@@ -111,8 +99,42 @@ const flagToCountry = (flag: string): string => {
         .join('');
 };
 
+const countryToFlag = (country: string): string => {
+    return Array.from(country)
+        .map((char) => String.fromCodePoint(char.charCodeAt(0) - 65 + REGIONAL_INDICATOR_BASE))
+        .join('');
+};
+
 const streamText = (stream: FilterableStream): string => {
     return `${stream.description ?? ''}\n${stream.name ?? ''}`;
+};
+
+export const parseSize = (stream: FilterableStream): number | null => {
+    const hinted = stream.behaviorHints?.videoSize;
+    if (typeof hinted === 'number' && hinted > 0) {
+        return hinted;
+    }
+
+    const match = streamText(stream).match(SIZE_PATTERN);
+    if (!match) {
+        return null;
+    }
+
+    const value = parseFloat(match[1].replace(',', '.'));
+    const unit = SIZE_UNITS[`${match[2].toLowerCase()}b`];
+    return isNaN(value) ? null : value * unit;
+};
+
+export const parseSeeds = (stream: FilterableStream): number | null => {
+    const text = streamText(stream);
+    for (const pattern of SEEDS_PATTERNS) {
+        const match = text.match(pattern);
+        if (match) {
+            return parseInt(match[1], 10);
+        }
+    }
+
+    return null;
 };
 
 export const parseLanguages = (stream: FilterableStream): string[] => {
@@ -147,81 +169,87 @@ export const collectLanguages = (streams: FilterableStream[]): string[] => {
     });
 };
 
+export const languageFlag = (language: string): string | null => {
+    const country = Object.entries(LANGUAGE_COUNTRIES)
+        .find(([alpha2]) => toLanguageCode(alpha2) === language)?.[1];
+    return country ? countryToFlag(country) : null;
+};
+
 export const languageOptionLabel = (language: string): string => {
-    return languageLabel(language);
+    const flag = languageFlag(language);
+    return flag ? `${flag} ${languageLabel(language)}` : languageLabel(language);
 };
 
-export const parseSize = (stream: FilterableStream): number | null => {
-    const hinted = stream.behaviorHints?.videoSize;
-    if (typeof hinted === 'number' && hinted > 0) {
-        return hinted;
-    }
-
-    const match = streamText(stream).match(SIZE_PATTERN);
-    if (!match) {
-        return null;
-    }
-
-    const value = parseFloat(match[1].replace(',', '.'));
-    const unit = SIZE_UNITS[`${match[2].toLowerCase()}b`];
-    return isNaN(value) ? null : value * unit;
+const withinBounds = (value: number | null, min: number | null, max: number | null): boolean => {
+    // Streams whose value cannot be determined are kept: the filters only drop
+    // streams known to fall outside the chosen range.
+    return value === null || ((min === null || value >= min) && (max === null || value <= max));
 };
 
-export const parseSeeds = (stream: FilterableStream): number | null => {
-    const text = streamText(stream);
-    for (const pattern of SEEDS_PATTERNS) {
-        const match = text.match(pattern);
-        if (match) {
-            return parseInt(match[1], 10);
-        }
-    }
-
-    return null;
-};
-
-const parseThreshold = (value: string): [string, number] | null => {
-    const match = value.match(/^(MIN|MAX)_(\d+)$/);
-    return match ? [match[1], parseInt(match[2], 10)] : null;
-};
-
-// Streams whose size or seeds cannot be determined are kept: the filters
-// only drop streams known to fall outside the chosen range.
 export const matchesFilters = (stream: FilterableStream, filters: StreamFilters): boolean => {
-    const sizeThreshold = parseThreshold(filters.size);
-    if (sizeThreshold) {
-        const size = parseSize(stream);
-        const [kind, gigabytes] = sizeThreshold;
-        if (size !== null && (kind === 'MAX' ? size > gigabytes * GB : size < gigabytes * GB)) {
-            return false;
-        }
-    }
-
-    const seedsThreshold = parseThreshold(filters.seeds);
-    if (seedsThreshold) {
-        const seeds = parseSeeds(stream);
-        if (seeds !== null && seeds < seedsThreshold[1]) {
-            return false;
-        }
-    }
-
-    if (filters.language !== ANY_KEY && !parseLanguages(stream).includes(filters.language)) {
+    if ((filters.sizeMin !== null || filters.sizeMax !== null) &&
+        !withinBounds(parseSize(stream), filters.sizeMin === null ? null : filters.sizeMin * GB, filters.sizeMax === null ? null : filters.sizeMax * GB)) {
         return false;
+    }
+
+    if ((filters.seedsMin !== null || filters.seedsMax !== null) &&
+        !withinBounds(parseSeeds(stream), filters.seedsMin, filters.seedsMax)) {
+        return false;
+    }
+
+    if (filters.language !== ANY_KEY) {
+        const languages = parseLanguages(stream);
+        if (languages.length > 0 && !languages.includes(filters.language)) {
+            return false;
+        }
     }
 
     return true;
 };
 
-const isOption = (options: StreamFilterOption[], value: unknown): value is string => {
-    return options.some((option) => option.value === value);
+export const countActiveFilters = (filters: StreamFilters): number => {
+    return [
+        filters.sizeMin !== null || filters.sizeMax !== null,
+        filters.seedsMin !== null || filters.seedsMax !== null,
+        filters.language !== ANY_KEY,
+    ].filter(Boolean).length;
+};
+
+// Slider positions are stop indexes; the bounds are stored as values so the stops can change.
+export const boundsToStops = (stops: number[], min: number | null, max: number | null): [number, number] => {
+    const indexOf = (value: number | null, fallback: number) => {
+        if (value === null) {
+            return fallback;
+        }
+
+        const index = stops.findIndex((stop) => stop >= value);
+        return index === -1 ? stops.length - 1 : index;
+    };
+
+    return [indexOf(min, 0), indexOf(max, stops.length - 1)];
+};
+
+export const stopsToBounds = (stops: number[], [low, high]: [number, number]): [number | null, number | null] => {
+    return [
+        low <= 0 ? null : stops[low],
+        high >= stops.length - 1 ? null : stops[high],
+    ];
+};
+
+const readNumber = (value: unknown): number | null => {
+    return typeof value === 'number' && isFinite(value) && value >= 0 ? value : null;
 };
 
 const readStoredFilters = (): StreamFilters => {
     try {
         const stored = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? '{}');
         return {
-            size: isOption(SIZE_OPTIONS, stored.size) ? stored.size : ANY_KEY,
-            seeds: isOption(SEEDS_OPTIONS, stored.seeds) ? stored.seeds : ANY_KEY,
+            sizeMin: readNumber(stored.sizeMin),
+            sizeMax: readNumber(stored.sizeMax),
+            seedsMin: readNumber(stored.seedsMin),
+            seedsMax: readNumber(stored.seedsMax),
             language: typeof stored.language === 'string' ? stored.language : ANY_KEY,
+            panelOpen: stored.panelOpen === true,
         };
     } catch {
         return DEFAULT_FILTERS;

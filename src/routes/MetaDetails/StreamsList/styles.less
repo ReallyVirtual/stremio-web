@@ -110,19 +110,88 @@
             min-width: 40%;
             flex-grow: 1;
         }
+
+        .filters-button-container {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 0.5em;
+            padding: 1em;
+            max-height: 3em;
+
+            .icon {
+                width: 1.5em;
+                height: 1.5em;
+                color: var(--primary-foreground-color);
+                opacity: 0.6;
+            }
+
+            .badge {
+                position: absolute;
+                top: 0.3em;
+                right: 0.3em;
+                min-width: 1.3em;
+                height: 1.3em;
+                padding: 0 0.3em;
+                border-radius: 0.65em;
+                font-size: 0.7em;
+                line-height: 1.3em;
+                text-align: center;
+                color: var(--primary-foreground-color);
+                background-color: var(--primary-accent-color);
+            }
+
+            &:hover, &:global(.active) {
+                background-color: var(--overlay-color);
+
+                .icon {
+                    opacity: 1;
+                }
+            }
+        }
     }
 
-    .filters-wrapper {
+    .filters-panel {
         display: flex;
-        flex-wrap: wrap;
-        align-items: center;
+        flex-direction: column;
         z-index: 1;
         margin: 0.5em 1em 0 1em;
-        gap: 0.5em;
+        padding: 0.75em 1em;
+        gap: 0.75em;
+        border-radius: var(--border-radius);
+        background-color: var(--overlay-color);
         overflow: visible;
 
+        .filter-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75em;
+            overflow: visible;
+        }
+
+        .filter-label {
+            flex: 0 0 5em;
+            font-size: 0.9rem;
+            color: var(--primary-foreground-color);
+            opacity: 0.8;
+        }
+
+        .filter-slider {
+            flex: 1 1 auto;
+            min-width: 6em;
+        }
+
+        .filter-value {
+            flex: 0 0 auto;
+            min-width: 6em;
+            font-size: 0.9rem;
+            text-align: right;
+            color: var(--primary-foreground-color);
+        }
+
         .filter-input-container {
-            flex: 1 1 0;
+            flex: 1 1 auto;
             min-width: 0;
         }
     }

@@ -8,13 +8,13 @@ const PropTypes = require('prop-types');
 const classnames = require('classnames');
 const { useTranslation } = require('react-i18next');
 const { default: Icon } = require('@stremio/stremio-icons/react');
-const { Button, Image, MultiselectMenu } = require('stremio/components');
+const { Button, Image, MultiselectMenu, RangeSlider } = require('stremio/components');
 const { useCore } = require('stremio/core');
 const Stream = require('./Stream');
 const styles = require('./styles');
 const { usePlatform, useProfile } = require('stremio/common');
 const { default: SeasonEpisodePicker } = require('../EpisodePicker');
-const { ANY_KEY, MULTI_LANGUAGE_KEY, SIZE_OPTIONS, SEEDS_OPTIONS, collectLanguages, languageOptionLabel, matchesFilters, useStreamFilters } = require('./streamFilters');
+const { ANY_KEY, MULTI_LANGUAGE_KEY, SIZE_STOPS, SEEDS_STOPS, boundsToStops, collectLanguages, countActiveFilters, languageOptionLabel, matchesFilters, stopsToBounds, useStreamFilters } = require('./streamFilters');
 
 const ALL_ADDONS_KEY = 'ALL';
 
@@ -35,14 +35,19 @@ const StreamsList = ({ className, video, type, externalPlayerCallbackCanMarkWatc
         scrollToTop();
         setSelectedAddon(value);
     }, [scrollToTop]);
-    const onSizeSelected = React.useCallback((value) => {
+    const onSizeChange = React.useCallback((range) => {
+        const [sizeMin, sizeMax] = stopsToBounds(SIZE_STOPS, range);
         scrollToTop();
-        updateStreamFilters({ size: value });
+        updateStreamFilters({ sizeMin, sizeMax });
     }, [scrollToTop, updateStreamFilters]);
-    const onSeedsSelected = React.useCallback((value) => {
+    const onSeedsChange = React.useCallback((range) => {
+        const [seedsMin, seedsMax] = stopsToBounds(SEEDS_STOPS, range);
         scrollToTop();
-        updateStreamFilters({ seeds: value });
+        updateStreamFilters({ seedsMin, seedsMax });
     }, [scrollToTop, updateStreamFilters]);
+    const toggleFiltersPanel = React.useCallback(() => {
+        updateStreamFilters({ panelOpen: !streamFilters.panelOpen });
+    }, [streamFilters.panelOpen, updateStreamFilters]);
     const onLanguageSelected = React.useCallback((value) => {
         scrollToTop();
         updateStreamFilters({ language: value });
@@ -112,28 +117,31 @@ const StreamsList = ({ className, video, type, externalPlayerCallbackCanMarkWatc
         return filteredStreams.filter((stream) => matchesFilters(stream, effectiveStreamFilters));
     }, [filteredStreams, effectiveStreamFilters]);
     const hiddenStreamsCount = filteredStreams.length - visibleStreams.length;
-    const filterOptions = React.useCallback((options) => {
-        return options.map(({ value, labelKey, labelDefault, labelValues }) => {
-            const label = t(labelKey, { defaultValue: labelDefault, ...labelValues });
-            return { value, label, title: label };
-        });
+    const activeFiltersCount = countActiveFilters(effectiveStreamFilters);
+    const sizeRange = React.useMemo(() => {
+        return boundsToStops(SIZE_STOPS, streamFilters.sizeMin, streamFilters.sizeMax);
+    }, [streamFilters.sizeMin, streamFilters.sizeMax]);
+    const seedsRange = React.useMemo(() => {
+        return boundsToStops(SEEDS_STOPS, streamFilters.seedsMin, streamFilters.seedsMax);
+    }, [streamFilters.seedsMin, streamFilters.seedsMax]);
+    const formatSizeStop = React.useCallback((index) => {
+        return SIZE_STOPS[index] === Infinity ? '∞' : `${SIZE_STOPS[index]} GB`;
+    }, []);
+    const formatSeedsStop = React.useCallback((index) => {
+        return SEEDS_STOPS[index] === Infinity ? '∞' : `${SEEDS_STOPS[index]}`;
+    }, []);
+    const formatRange = React.useCallback((stops, [low, high], format) => {
+        return low === 0 && high === stops.length - 1 ?
+            t('STREAMS_FILTER_ANY', { defaultValue: 'Any' })
+            :
+            `${format(low)} – ${format(high)}`;
     }, [t]);
-    const sizeOptions = React.useMemo(() => ({
-        options: filterOptions(SIZE_OPTIONS),
-        value: streamFilters.size,
-        onSelect: onSizeSelected
-    }), [filterOptions, streamFilters.size, onSizeSelected]);
-    const seedsOptions = React.useMemo(() => ({
-        options: filterOptions(SEEDS_OPTIONS),
-        value: streamFilters.seeds,
-        onSelect: onSeedsSelected
-    }), [filterOptions, streamFilters.seeds, onSeedsSelected]);
     const languageOptions = React.useMemo(() => ({
         options: [
-            ...filterOptions([{ value: ANY_KEY, labelKey: 'STREAMS_FILTER_LANGUAGE_ANY', labelDefault: 'Any language' }]),
+            { value: ANY_KEY, label: t('STREAMS_FILTER_LANGUAGE_ANY', { defaultValue: 'Any language' }), title: t('STREAMS_FILTER_LANGUAGE_ANY', { defaultValue: 'Any language' }) },
             ...streamLanguages.map((language) => {
                 const label = language === MULTI_LANGUAGE_KEY ?
-                    t('STREAMS_FILTER_LANGUAGE_MULTI', { defaultValue: 'Multi-language' })
+                    `🌐 ${t('STREAMS_FILTER_LANGUAGE_MULTI', { defaultValue: 'Multi-language' })}`
                     :
                     languageOptionLabel(language);
                 return { value: language, label, title: label };
@@ -141,7 +149,7 @@ const StreamsList = ({ className, video, type, externalPlayerCallbackCanMarkWatc
         ],
         value: effectiveStreamFilters.language,
         onSelect: onLanguageSelected
-    }), [filterOptions, streamLanguages, effectiveStreamFilters.language, onLanguageSelected, t]);
+    }), [streamLanguages, effectiveStreamFilters.language, onLanguageSelected, t]);
     const selectableOptions = React.useMemo(() => {
         return {
             options: [
@@ -192,24 +200,57 @@ const StreamsList = ({ className, video, type, externalPlayerCallbackCanMarkWatc
                         :
                         null
                 }
+                {
+                    Object.keys(streamsByAddon).length > 0 ?
+                        <Button className={classnames(styles['button-container'], styles['filters-button-container'], { 'active': streamFilters.panelOpen })} title={t('STREAMS_FILTERS', { defaultValue: 'Filters' })} tabIndex={0} onClick={toggleFiltersPanel}>
+                            <Icon className={styles['icon']} name={'filters-outline'} />
+                            {
+                                activeFiltersCount > 0 ?
+                                    <div className={styles['badge']}>{activeFiltersCount}</div>
+                                    :
+                                    null
+                            }
+                        </Button>
+                        :
+                        null
+                }
             </div>
             {
-                Object.keys(streamsByAddon).length > 0 ?
-                    <div className={styles['filters-wrapper']}>
-                        <MultiselectMenu
-                            {...sizeOptions}
-                            className={styles['filter-input-container']}
-                        />
-                        <MultiselectMenu
-                            {...seedsOptions}
-                            className={styles['filter-input-container']}
-                        />
+                streamFilters.panelOpen && Object.keys(streamsByAddon).length > 0 ?
+                    <div className={styles['filters-panel']}>
+                        <div className={styles['filter-row']}>
+                            <div className={styles['filter-label']}>{t('STREAMS_FILTER_SIZE', { defaultValue: 'Size' })}</div>
+                            <RangeSlider
+                                className={styles['filter-slider']}
+                                min={0}
+                                max={SIZE_STOPS.length - 1}
+                                value={sizeRange}
+                                formatValue={formatSizeStop}
+                                onChange={onSizeChange}
+                            />
+                            <div className={styles['filter-value']}>{formatRange(SIZE_STOPS, sizeRange, formatSizeStop)}</div>
+                        </div>
+                        <div className={styles['filter-row']}>
+                            <div className={styles['filter-label']}>{t('STREAMS_FILTER_SEEDS', { defaultValue: 'Seeds' })}</div>
+                            <RangeSlider
+                                className={styles['filter-slider']}
+                                min={0}
+                                max={SEEDS_STOPS.length - 1}
+                                value={seedsRange}
+                                formatValue={formatSeedsStop}
+                                onChange={onSeedsChange}
+                            />
+                            <div className={styles['filter-value']}>{formatRange(SEEDS_STOPS, seedsRange, formatSeedsStop)}</div>
+                        </div>
                         {
                             streamLanguages.length > 0 ?
-                                <MultiselectMenu
-                                    {...languageOptions}
-                                    className={styles['filter-input-container']}
-                                />
+                                <div className={styles['filter-row']}>
+                                    <div className={styles['filter-label']}>{t('STREAMS_FILTER_LANGUAGE', { defaultValue: 'Language' })}</div>
+                                    <MultiselectMenu
+                                        {...languageOptions}
+                                        className={styles['filter-input-container']}
+                                    />
+                                </div>
                                 :
                                 null
                         }

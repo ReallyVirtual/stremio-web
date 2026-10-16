@@ -33,6 +33,7 @@ import Slider from './Slider';
 import ShortcutsGroup from './ShortcutsGroup';
 import TextInput from './TextInput';
 import Toggle from './Toggle';
+import RangeSlider from './RangeSlider';
 import Transition from './Transition';
 import UpdateBanner from './UpdateBanner';
 import Video from './Video';
@@ -73,6 +74,7 @@ export {
     ShortcutsGroup,
     TextInput,
     Toggle,
+    RangeSlider,
     Transition,
     UpdateBanner,
     Video,
