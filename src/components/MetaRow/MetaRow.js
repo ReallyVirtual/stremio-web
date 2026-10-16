@@ -8,23 +8,30 @@ const { default: Icon } = require('@stremio/stremio-icons/react');
 const { Button } = require('stremio/components');
 const CONSTANTS = require('stremio/common/CONSTANTS');
 const useTranslate = require('stremio/common/useTranslate');
+const { default: useHideWatched } = require('stremio/common/useHideWatched');
 const MetaRowPlaceholder = require('./MetaRowPlaceholder');
 const styles = require('./styles');
 
 const MetaRow = ({ className, title, catalog, message, itemComponent, notifications }) => {
     const t = useTranslate();
+    const [hideWatched] = useHideWatched();
 
     const catalogTitle = React.useMemo(() => {
         return title ?? t.catalogTitle(catalog);
     }, [title, catalog, t.catalogTitle]);
 
     const items = React.useMemo(() => {
-        return catalog?.items ?? catalog?.content?.content;
-    }, [catalog]);
+        const items = catalog?.items ?? catalog?.content?.content;
+        return hideWatched && Array.isArray(items) ? items.filter((item) => item.watched !== true) : items;
+    }, [catalog, hideWatched]);
 
     const href = React.useMemo(() => {
         return catalog?.deepLinks?.discover ?? catalog?.deepLinks?.library;
     }, [catalog]);
+
+    if (hideWatched && Array.isArray(items) && items.length === 0 && typeof message !== 'string') {
+        return null;
+    }
 
     return (
         <div className={classnames(className, styles['meta-row-container'])}>
