@@ -14,6 +14,7 @@ const Stream = require('./Stream');
 const styles = require('./styles');
 const { usePlatform, useProfile } = require('stremio/common');
 const { default: SeasonEpisodePicker } = require('../EpisodePicker');
+const { SIZE_OPTIONS, SEEDS_OPTIONS, matchesFilters, useStreamFilters } = require('./streamFilters');
 
 const ALL_ADDONS_KEY = 'ALL';
 
@@ -26,10 +27,22 @@ const StreamsList = ({ className, video, type, externalPlayerCallbackCanMarkWatc
     const goBack = useGoBack();
     const streamsContainerRef = React.useRef(null);
     const [selectedAddon, setSelectedAddon] = React.useState(ALL_ADDONS_KEY);
-    const onAddonSelected = React.useCallback((value) => {
-        streamsContainerRef.current.scrollTo({ top: 0, left: 0, behavior: platform.name === 'ios' ? 'smooth' : 'instant' });
-        setSelectedAddon(value);
+    const [streamFilters, updateStreamFilters] = useStreamFilters();
+    const scrollToTop = React.useCallback(() => {
+        streamsContainerRef.current?.scrollTo({ top: 0, left: 0, behavior: platform.name === 'ios' ? 'smooth' : 'instant' });
     }, [platform]);
+    const onAddonSelected = React.useCallback((value) => {
+        scrollToTop();
+        setSelectedAddon(value);
+    }, [scrollToTop]);
+    const onSizeSelected = React.useCallback((value) => {
+        scrollToTop();
+        updateStreamFilters({ size: value });
+    }, [scrollToTop, updateStreamFilters]);
+    const onSeedsSelected = React.useCallback((value) => {
+        scrollToTop();
+        updateStreamFilters({ seeds: value });
+    }, [scrollToTop, updateStreamFilters]);
     const showInstallAddonsButton = React.useMemo(() => {
         return !profile || profile.auth === null || profile.auth?.user?.isNewUser === true && !video?.upcoming;
     }, [profile, video]);
@@ -86,6 +99,26 @@ const StreamsList = ({ className, video, type, externalPlayerCallbackCanMarkWatc
             :
             streamsByAddon[effectiveSelectedAddon].streams;
     }, [streamsByAddon, effectiveSelectedAddon]);
+    const visibleStreams = React.useMemo(() => {
+        return filteredStreams.filter((stream) => matchesFilters(stream, streamFilters));
+    }, [filteredStreams, streamFilters]);
+    const hiddenStreamsCount = filteredStreams.length - visibleStreams.length;
+    const filterOptions = React.useCallback((options) => {
+        return options.map(({ value, labelKey, labelDefault, labelValues }) => {
+            const label = t(labelKey, { defaultValue: labelDefault, ...labelValues });
+            return { value, label, title: label };
+        });
+    }, [t]);
+    const sizeOptions = React.useMemo(() => ({
+        options: filterOptions(SIZE_OPTIONS),
+        value: streamFilters.size,
+        onSelect: onSizeSelected
+    }), [filterOptions, streamFilters.size, onSizeSelected]);
+    const seedsOptions = React.useMemo(() => ({
+        options: filterOptions(SEEDS_OPTIONS),
+        value: streamFilters.seeds,
+        onSelect: onSeedsSelected
+    }), [filterOptions, streamFilters.seeds, onSeedsSelected]);
     const selectableOptions = React.useMemo(() => {
         return {
             options: [
@@ -138,6 +171,21 @@ const StreamsList = ({ className, video, type, externalPlayerCallbackCanMarkWatc
                 }
             </div>
             {
+                Object.keys(streamsByAddon).length > 0 ?
+                    <div className={styles['filters-wrapper']}>
+                        <MultiselectMenu
+                            {...sizeOptions}
+                            className={styles['filter-input-container']}
+                        />
+                        <MultiselectMenu
+                            {...seedsOptions}
+                            className={styles['filter-input-container']}
+                        />
+                    </div>
+                    :
+                    null
+            }
+            {
                 props.streams.length === 0 ?
                     <div className={styles['message-container']}>
                         {
@@ -182,7 +230,7 @@ const StreamsList = ({ className, video, type, externalPlayerCallbackCanMarkWatc
                             :
                             <React.Fragment>
                                 <div className={styles['streams-container']} ref={streamsContainerRef}>
-                                    {filteredStreams.map((stream, index) => (
+                                    {visibleStreams.map((stream, index) => (
                                         <Stream
                                             key={index}
                                             videoId={video?.id}
@@ -203,6 +251,14 @@ const StreamsList = ({ className, video, type, externalPlayerCallbackCanMarkWatc
                                                 <Icon className={styles['icon']} name={'addons'} />
                                                 <div className={styles['label']}>{t('ADDON_CATALOGUE_MORE')}</div>
                                             </Button>
+                                            :
+                                            null
+                                    }
+                                    {
+                                        hiddenStreamsCount > 0 ?
+                                            <div className={styles['hidden-streams']}>
+                                                {t('STREAMS_FILTER_HIDDEN', { defaultValue: '{{count}} streams hidden by the size and seeds filters', count: hiddenStreamsCount })}
+                                            </div>
                                             :
                                             null
                                     }

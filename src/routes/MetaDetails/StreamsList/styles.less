@@ -112,12 +112,35 @@
         }
     }
 
+    .filters-wrapper {
+        display: flex;
+        align-items: center;
+        z-index: 1;
+        margin: 0.5em 1em 0 1em;
+        gap: 0 0.5em;
+        overflow: visible;
+
+        .filter-input-container {
+            flex: 1 1 0;
+            min-width: 0;
+        }
+    }
+
     .streams-container {
         flex: 1 1 auto;
         align-self: stretch;
         margin-top: 1rem;
         padding: 0 1rem;
         overflow-y: auto;
+    }
+
+    .hidden-streams {
+        flex: none;
+        padding: 0.5rem 1rem 1rem;
+        font-size: 0.9rem;
+        text-align: center;
+        color: var(--primary-foreground-color);
+        opacity: 0.6;
     }
 
     .install-button-container {
