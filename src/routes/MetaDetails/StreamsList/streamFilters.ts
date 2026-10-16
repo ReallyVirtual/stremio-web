@@ -1,6 +1,8 @@
 // Copyright (C) 2017-2026 Smart code 203358507
 
 import { useCallback, useState } from 'react';
+import langs from 'langs';
+import { toCode as toLanguageCode, label as languageLabel } from 'stremio/common/languages';
 
 type FilterableStream = {
     name?: string | null;
@@ -11,6 +13,7 @@ type FilterableStream = {
 export type StreamFilters = {
     size: string;
     seeds: string;
+    language: string;
 };
 
 export type StreamFilterOption = {
@@ -21,6 +24,7 @@ export type StreamFilterOption = {
 };
 
 export const ANY_KEY = 'ANY';
+export const MULTI_LANGUAGE_KEY = 'MULTI';
 
 const STORAGE_KEY = 'streamsListFilters';
 const GB = 1024 * 1024 * 1024;
@@ -31,7 +35,7 @@ const SIZE_UNITS: Record<string, number> = {
     tb: GB * 1024,
 };
 
-const DEFAULT_FILTERS: StreamFilters = { size: ANY_KEY, seeds: ANY_KEY };
+const DEFAULT_FILTERS: StreamFilters = { size: ANY_KEY, seeds: ANY_KEY, language: ANY_KEY };
 
 export const SIZE_OPTIONS: StreamFilterOption[] = [
     { value: ANY_KEY, labelKey: 'STREAMS_FILTER_SIZE_ANY', labelDefault: 'Any size' },
@@ -69,8 +73,82 @@ const SEEDS_PATTERNS = [
     /\bS\s*[:=]\s*(\d+)/,
 ];
 
+// Languages: addons tag them as flag emojis (Torrentio: 🇬🇧 / 🇮🇹), as names (MediaFusion,
+// Comet: "Hindi", "Multi") or as "Dual Audio". Values are ISO 639-2 codes from `langs`, so
+// labels come from the same table the player settings use. Untagged streams (most English-only
+// torrents) have no language and are hidden once a specific language is chosen.
+const FLAG_LANGUAGES: Record<string, string> = {
+    GB: 'en', US: 'en', AU: 'en', CA: 'en', NZ: 'en', IE: 'en',
+    ES: 'es', MX: 'es', AR: 'es', CO: 'es', CL: 'es',
+    PT: 'pt', BR: 'pt',
+    DE: 'de', AT: 'de',
+    CN: 'zh', TW: 'zh', HK: 'zh',
+    SA: 'ar', AE: 'ar', EG: 'ar',
+    IT: 'it', FR: 'fr', RU: 'ru', IN: 'hi', JP: 'ja', KR: 'ko', NL: 'nl', PL: 'pl', TR: 'tr',
+    SE: 'sv', NO: 'no', DK: 'da', FI: 'fi', GR: 'el', CZ: 'cs', HU: 'hu', RO: 'ro', UA: 'uk',
+    IL: 'he', IR: 'fa', TH: 'th', VN: 'vi', ID: 'id', MY: 'ms', PK: 'ur', BD: 'bn', BG: 'bg',
+    HR: 'hr', RS: 'sr', SK: 'sk', SI: 'sl', LT: 'lt', LV: 'lv', EE: 'et',
+};
+const FLAG_PATTERN = /[\u{1F1E6}-\u{1F1FF}]{2}/gu;
+const REGIONAL_INDICATOR_BASE = 0x1F1E6;
+const SHORT_NAMES_ALLOWED = ['Thai', 'Urdu', 'Zulu'];
+const MULTI_PATTERN = /\bmulti(?:[ -]?(?:audio|lang(?:uage)?s?|sub(?:s|titles)?))?\b|\bdual[ -]?audio\b/i;
+const LANGUAGE_ALIASES: [RegExp, string][] = [
+    [/\blatino\b|\bcastellano\b/i, 'es'],
+    [/\bbrazilian\b/i, 'pt'],
+    [/\bmandarin\b|\bcantonese\b/i, 'zh'],
+];
+const LANGUAGE_NAMES: [RegExp, string][] = [
+    ...LANGUAGE_ALIASES,
+    ...langs.all()
+        .filter((lang) => !lang.name.includes('(') && (lang.name.length > 4 || SHORT_NAMES_ALLOWED.includes(lang.name)))
+        .map((lang): [RegExp, string] => [new RegExp(`\\b${lang.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i'), lang['2']]),
+];
+
+const flagToCountry = (flag: string): string => {
+    return Array.from(flag)
+        .map((char) => String.fromCharCode((char.codePointAt(0) ?? 0) - REGIONAL_INDICATOR_BASE + 65))
+        .join('');
+};
+
 const streamText = (stream: FilterableStream): string => {
     return `${stream.description ?? ''}\n${stream.name ?? ''}`;
+};
+
+export const parseLanguages = (stream: FilterableStream): string[] => {
+    const text = streamText(stream);
+    const languages = new Set<string>();
+
+    for (const flag of text.match(FLAG_PATTERN) ?? []) {
+        const language = FLAG_LANGUAGES[flagToCountry(flag)];
+        if (language) {
+            languages.add(toLanguageCode(language));
+        }
+    }
+
+    for (const [pattern, language] of LANGUAGE_NAMES) {
+        if (pattern.test(text)) {
+            languages.add(toLanguageCode(language));
+        }
+    }
+
+    if (MULTI_PATTERN.test(text)) {
+        languages.add(MULTI_LANGUAGE_KEY);
+    }
+
+    return Array.from(languages);
+};
+
+export const collectLanguages = (streams: FilterableStream[]): string[] => {
+    const languages = new Set<string>();
+    streams.forEach((stream) => parseLanguages(stream).forEach((language) => languages.add(language)));
+    return Array.from(languages).sort((a, b) => {
+        return a === MULTI_LANGUAGE_KEY ? -1 : b === MULTI_LANGUAGE_KEY ? 1 : languageLabel(a).localeCompare(languageLabel(b));
+    });
+};
+
+export const languageOptionLabel = (language: string): string => {
+    return languageLabel(language);
 };
 
 export const parseSize = (stream: FilterableStream): number | null => {
@@ -126,6 +204,10 @@ export const matchesFilters = (stream: FilterableStream, filters: StreamFilters)
         }
     }
 
+    if (filters.language !== ANY_KEY && !parseLanguages(stream).includes(filters.language)) {
+        return false;
+    }
+
     return true;
 };
 
@@ -139,6 +221,7 @@ const readStoredFilters = (): StreamFilters => {
         return {
             size: isOption(SIZE_OPTIONS, stored.size) ? stored.size : ANY_KEY,
             seeds: isOption(SEEDS_OPTIONS, stored.seeds) ? stored.seeds : ANY_KEY,
+            language: typeof stored.language === 'string' ? stored.language : ANY_KEY,
         };
     } catch {
         return DEFAULT_FILTERS;

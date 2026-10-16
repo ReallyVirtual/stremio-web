@@ -14,7 +14,7 @@ const Stream = require('./Stream');
 const styles = require('./styles');
 const { usePlatform, useProfile } = require('stremio/common');
 const { default: SeasonEpisodePicker } = require('../EpisodePicker');
-const { SIZE_OPTIONS, SEEDS_OPTIONS, matchesFilters, useStreamFilters } = require('./streamFilters');
+const { ANY_KEY, MULTI_LANGUAGE_KEY, SIZE_OPTIONS, SEEDS_OPTIONS, collectLanguages, languageOptionLabel, matchesFilters, useStreamFilters } = require('./streamFilters');
 
 const ALL_ADDONS_KEY = 'ALL';
 
@@ -42,6 +42,10 @@ const StreamsList = ({ className, video, type, externalPlayerCallbackCanMarkWatc
     const onSeedsSelected = React.useCallback((value) => {
         scrollToTop();
         updateStreamFilters({ seeds: value });
+    }, [scrollToTop, updateStreamFilters]);
+    const onLanguageSelected = React.useCallback((value) => {
+        scrollToTop();
+        updateStreamFilters({ language: value });
     }, [scrollToTop, updateStreamFilters]);
     const showInstallAddonsButton = React.useMemo(() => {
         return !profile || profile.auth === null || profile.auth?.user?.isNewUser === true && !video?.upcoming;
@@ -99,9 +103,14 @@ const StreamsList = ({ className, video, type, externalPlayerCallbackCanMarkWatc
             :
             streamsByAddon[effectiveSelectedAddon].streams;
     }, [streamsByAddon, effectiveSelectedAddon]);
+    const streamLanguages = React.useMemo(() => collectLanguages(filteredStreams), [filteredStreams]);
+    const effectiveStreamFilters = React.useMemo(() => ({
+        ...streamFilters,
+        language: streamLanguages.includes(streamFilters.language) ? streamFilters.language : ANY_KEY
+    }), [streamFilters, streamLanguages]);
     const visibleStreams = React.useMemo(() => {
-        return filteredStreams.filter((stream) => matchesFilters(stream, streamFilters));
-    }, [filteredStreams, streamFilters]);
+        return filteredStreams.filter((stream) => matchesFilters(stream, effectiveStreamFilters));
+    }, [filteredStreams, effectiveStreamFilters]);
     const hiddenStreamsCount = filteredStreams.length - visibleStreams.length;
     const filterOptions = React.useCallback((options) => {
         return options.map(({ value, labelKey, labelDefault, labelValues }) => {
@@ -119,6 +128,20 @@ const StreamsList = ({ className, video, type, externalPlayerCallbackCanMarkWatc
         value: streamFilters.seeds,
         onSelect: onSeedsSelected
     }), [filterOptions, streamFilters.seeds, onSeedsSelected]);
+    const languageOptions = React.useMemo(() => ({
+        options: [
+            ...filterOptions([{ value: ANY_KEY, labelKey: 'STREAMS_FILTER_LANGUAGE_ANY', labelDefault: 'Any language' }]),
+            ...streamLanguages.map((language) => {
+                const label = language === MULTI_LANGUAGE_KEY ?
+                    t('STREAMS_FILTER_LANGUAGE_MULTI', { defaultValue: 'Multi-language' })
+                    :
+                    languageOptionLabel(language);
+                return { value: language, label, title: label };
+            })
+        ],
+        value: effectiveStreamFilters.language,
+        onSelect: onLanguageSelected
+    }), [filterOptions, streamLanguages, effectiveStreamFilters.language, onLanguageSelected, t]);
     const selectableOptions = React.useMemo(() => {
         return {
             options: [
@@ -181,6 +204,15 @@ const StreamsList = ({ className, video, type, externalPlayerCallbackCanMarkWatc
                             {...seedsOptions}
                             className={styles['filter-input-container']}
                         />
+                        {
+                            streamLanguages.length > 0 ?
+                                <MultiselectMenu
+                                    {...languageOptions}
+                                    className={styles['filter-input-container']}
+                                />
+                                :
+                                null
+                        }
                     </div>
                     :
                     null
@@ -257,7 +289,7 @@ const StreamsList = ({ className, video, type, externalPlayerCallbackCanMarkWatc
                                     {
                                         hiddenStreamsCount > 0 ?
                                             <div className={styles['hidden-streams']}>
-                                                {t('STREAMS_FILTER_HIDDEN', { defaultValue: '{{count}} streams hidden by the size and seeds filters', count: hiddenStreamsCount })}
+                                                {t('STREAMS_FILTER_HIDDEN', { defaultValue: '{{count}} streams hidden by the filters', count: hiddenStreamsCount })}
                                             </div>
                                             :
                                             null
