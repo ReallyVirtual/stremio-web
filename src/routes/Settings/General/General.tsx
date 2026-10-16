@@ -2,7 +2,7 @@ import React, { forwardRef, useCallback, useEffect, useMemo, useState } from 're
 import { useTranslation } from 'react-i18next';
 import { useCore } from 'stremio/core';
 import { Button, Toggle } from 'stremio/components';
-import { usePlatform, useToast, useDiscord } from 'stremio/common';
+import { usePlatform, useToast, useDiscord, useHideWatched } from 'stremio/common';
 import { Section, Option, Link } from '../components';
 import User from './User';
 import useDataExport from './useDataExport';
@@ -19,6 +19,11 @@ const General = forwardRef<HTMLDivElement, Props>(({ profile }: Props, ref) => {
     const toast = useToast();
     const discord = useDiscord();
     const [dataExport, loadDataExport] = useDataExport();
+    const [hideWatched, setHideWatched] = useHideWatched();
+    const hideWatchedToggle = useMemo(() => ({
+        checked: hideWatched,
+        onClick: () => setHideWatched(!hideWatched),
+    }), [hideWatched, setHideWatched]);
 
     const [traktAuthStarted, setTraktAuthStarted] = useState(false);
 
@@ -150,6 +155,12 @@ const General = forwardRef<HTMLDivElement, Props>(({ profile }: Props, ref) => {
                 <Button className={'button'} title={isTraktAuthenticated ? t('LOG_OUT') : t('SETTINGS_TRAKT_AUTHENTICATE')} disabled={profile.auth === null} tabIndex={-1} onClick={onToggleTrakt}>
                     {isTraktAuthenticated ? t('LOG_OUT') : t('SETTINGS_TRAKT_AUTHENTICATE')}
                 </Button>
+            </Option>
+            <Option icon={'eye-off'} label={t('SETTINGS_HIDE_WATCHED', { defaultValue: 'Hide watched items' })}>
+                <Toggle
+                    tabIndex={-1}
+                    {...hideWatchedToggle}
+                />
             </Option>
             {
                 discord.available &&

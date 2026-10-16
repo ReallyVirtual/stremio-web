@@ -7,7 +7,7 @@ const { useSearchParams } = require('react-router-dom');
 const classnames = require('classnames');
 const { default: Icon } = require('@stremio/stremio-icons/react');
 const { useCore } = require('stremio/core');
-const { CONSTANTS, useBinaryState, useMediaQuery, useOnScrollToBottom, withCoreSuspender } = require('stremio/common');
+const { CONSTANTS, useBinaryState, useHideWatched, useMediaQuery, useOnScrollToBottom, withCoreSuspender } = require('stremio/common');
 const { epgDateKey, parseEpgDate } = require('stremio/common/EPG');
 const screenSizes = require('stremio/common/screen-sizes.less');
 const { default: getMetaDetailsHref } = require('stremio/common/getMetaDetailsHref');
@@ -50,6 +50,17 @@ const Discover = () => {
     const { navigateWithOrigin } = useNavigateWithOrigin();
     const routeActive = useRouteActive();
     const [discover, loadNextPage] = useDiscover(urlParams, catalogQueryParams);
+    const [hideWatched] = useHideWatched();
+    const metaItems = React.useMemo(() => {
+        if (discover.catalog?.content.type !== 'Ready') {
+            return [];
+        }
+
+        return hideWatched ?
+            discover.catalog.content.content.filter((metaItem) => metaItem.watched !== true)
+            :
+            discover.catalog.content.content;
+    }, [discover.catalog, hideWatched]);
     const [selectInputs, hasNextPage] = useSelectableInputs(discover);
     const [filtersOpen, openFilters, closeFilters] = useBinaryState(false);
     const selectedTypeOption = selectInputs[0].options.find(({ value }) => value === selectInputs[0].value);
@@ -63,9 +74,8 @@ const Discover = () => {
     const compactEpgDate = useMediaQuery(`(max-width: ${screenSizes.xsmall}) and (max-height: ${screenSizes['phone-landscape-size']}) and (orientation: landscape)`);
 
     const selectedMetaItem = React.useMemo(() => {
-        return discover.catalog?.content.type === 'Ready' &&
-            discover.catalog.content.content[selectedMetaItemIndex] || null;
-    }, [discover.catalog, selectedMetaItemIndex]);
+        return metaItems[selectedMetaItemIndex] || null;
+    }, [metaItems, selectedMetaItemIndex]);
 
     const metasContainerRef = React.useRef();
     const metaPreviewRef = React.useRef();
@@ -239,7 +249,7 @@ const Discover = () => {
 
         return (
             <div ref={metasContainerRef} className={classnames(styles['meta-items-container'], 'animation-fade-in')} onScroll={onScroll} onFocusCapture={metaItemsOnFocusCapture}>
-                {discover.catalog.content.content.map((metaItem, index) => (
+                {metaItems.map((metaItem, index) => (
                     <MetaItem
                         key={index}
                         className={classnames({ 'selected': selectedMetaItemIndex === index })}

@@ -24,6 +24,7 @@ const useOnScrollToBottom = require('./useOnScrollToBottom');
 const useProfile = require('./useProfile');
 const { default: useRouteFocused } = require('./useRouteFocused');
 const { default: useSettings } = require('./useSettings');
+const { default: useHideWatched } = require('./useHideWatched');
 const useStreamingServer = require('./useStreamingServer');
 const { default: useTimeout } = require('./useTimeout');
 const { default: usePlayUrl } = require('./usePlayUrl');
@@ -72,6 +73,7 @@ module.exports = {
     useProfile,
     useRouteFocused,
     useSettings,
+    useHideWatched,
     useStreamingServer,
     useTimeout,
     usePlayUrl,
