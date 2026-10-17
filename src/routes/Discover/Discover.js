@@ -87,6 +87,13 @@ const Discover = () => {
     const selectedMetaItem = React.useMemo(() => {
         return metaItems[selectedMetaItemIndex] || null;
     }, [metaItems, selectedMetaItemIndex]);
+    // Hiding the selected item (marked as watched) shortens the list: keep the selection on
+    // the item that took its place, or the last one when it was at the end.
+    React.useEffect(() => {
+        if (metaItems.length > 0 && selectedMetaItemIndex >= metaItems.length) {
+            setSelectedMetaItemIndex(metaItems.length - 1);
+        }
+    }, [metaItems, selectedMetaItemIndex]);
 
     const metasContainerRef = React.useRef();
     const metaPreviewRef = React.useRef();
@@ -262,7 +269,7 @@ const Discover = () => {
             <div ref={metasContainerRef} className={classnames(styles['meta-items-container'], 'animation-fade-in')} onScroll={onScroll} onFocusCapture={metaItemsOnFocusCapture}>
                 {metaItems.map((metaItem, index) => (
                     <MetaItem
-                        key={index}
+                        key={metaItem.id ?? index}
                         className={classnames({ 'selected': selectedMetaItemIndex === index })}
                         type={metaItem.type}
                         name={metaItem.name}
