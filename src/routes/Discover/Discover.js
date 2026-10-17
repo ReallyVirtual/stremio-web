@@ -8,6 +8,7 @@ const classnames = require('classnames');
 const { default: Icon } = require('@stremio/stremio-icons/react');
 const { useCore } = require('stremio/core');
 const { CONSTANTS, useBinaryState, useHideWatched, useMediaQuery, useOnScrollToBottom, withCoreSuspender } = require('stremio/common');
+const { default: useStoredFlag } = require('stremio/common/useStoredFlag');
 const { epgDateKey, parseEpgDate } = require('stremio/common/EPG');
 const screenSizes = require('stremio/common/screen-sizes.less');
 const { default: getMetaDetailsHref } = require('stremio/common/getMetaDetailsHref');
@@ -51,16 +52,26 @@ const Discover = () => {
     const routeActive = useRouteActive();
     const [discover, loadNextPage] = useDiscover(urlParams, catalogQueryParams);
     const [hideWatched] = useHideWatched();
+    // "Not watched" is Discover's own toggle; the Settings option hides watched items everywhere.
+    const [notWatchedOnly, setNotWatchedOnly] = useStoredFlag('discoverNotWatched');
+    const hidingWatched = hideWatched || notWatchedOnly;
+    const toggleNotWatched = React.useCallback(() => {
+        setNotWatchedOnly(!notWatchedOnly);
+    }, [notWatchedOnly, setNotWatchedOnly]);
     const metaItems = React.useMemo(() => {
         if (discover.catalog?.content.type !== 'Ready') {
             return [];
         }
 
-        return hideWatched ?
+        return hidingWatched ?
             discover.catalog.content.content.filter((metaItem) => metaItem.watched !== true)
             :
             discover.catalog.content.content;
-    }, [discover.catalog, hideWatched]);
+    }, [discover.catalog, hidingWatched]);
+    const hiddenItemsCount = discover.catalog?.content.type === 'Ready' ?
+        discover.catalog.content.content.length - metaItems.length
+        :
+        0;
     const [selectInputs, hasNextPage] = useSelectableInputs(discover);
     const [filtersOpen, openFilters, closeFilters] = useBinaryState(false);
     const selectedTypeOption = selectInputs[0].options.find(({ value }) => value === selectInputs[0].value);
@@ -286,6 +297,19 @@ const Discover = () => {
         like: selectedMetaItem.like,
     };
 
+    const renderNotWatchedButton = (withLabel) => (
+        <Button
+            className={classnames(styles['not-watched-button'], { [styles['active']]: hidingWatched, [styles['with-label']]: withLabel })}
+            title={hideWatched ? t('DISCOVER_NOT_WATCHED_SETTINGS', { defaultValue: 'Not watched (set in Settings)' }) : t('DISCOVER_NOT_WATCHED', { defaultValue: 'Not watched' })}
+            aria-pressed={hidingWatched}
+            disabled={hideWatched}
+            onClick={toggleNotWatched}
+        >
+            <Icon className={styles['not-watched-icon']} name={'eye-off'} />
+            {withLabel ? <span>{t('DISCOVER_NOT_WATCHED', { defaultValue: 'Not watched' })}</span> : null}
+        </Button>
+    );
+
     const renderMetaPreview = () => {
         if (isEpgLayout) {
             return null;
@@ -364,6 +388,7 @@ const Discover = () => {
                                 <span>{t('FILTERS')}</span>
                                 {activeFilterCount > 0 && <span className={styles['filter-count']}>{activeFilterCount}</span>}
                             </Button>
+                            {!isEpgLayout && renderNotWatchedButton(true)}
                         </div> : <div className={styles['selectable-inputs']}>
                             {selectInputs.map(({ title, options, value, onSelect }, index) => (
                                 <MultiselectMenu
@@ -381,6 +406,7 @@ const Discover = () => {
                                     <Icon className={styles['filter-icon']} name={'filters'} />
                                 </Button>
                             </div>
+                            {!isEpgLayout && renderNotWatchedButton(false)}
                         </div>}
                         {
                             isEpgLayout && compactEpgDate ?
@@ -416,6 +442,14 @@ const Discover = () => {
                             null
                     }
                     {renderCatalogContent()}
+                    {
+                        hiddenItemsCount > 0 ?
+                            <div className={styles['hidden-items']}>
+                                {t('DISCOVER_WATCHED_HIDDEN', { defaultValue: '{{count}} watched items hidden', count: hiddenItemsCount })}
+                            </div>
+                            :
+                            null
+                    }
                 </div>
                 {renderMetaPreview()}
             </div>
