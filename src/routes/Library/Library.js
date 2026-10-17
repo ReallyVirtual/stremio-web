@@ -10,6 +10,7 @@ const NotFound = require('stremio/routes/NotFound');
 const { useProfile, useNotifications, useOnScrollToBottom, withCoreSuspender } = require('stremio/common');
 const { default: toPath } = require('stremio-router/toPath');
 const { DelayedRenderer, Chips, Image, MainNavBars, LibItem, MultiselectMenu } = require('stremio/components');
+const { default: useHideWatched } = require('stremio/common/useHideWatched');
 const { default: Placeholder } = require('./Placeholder');
 const useLibrary = require('./useLibrary');
 const useSelectableInputs = require('./useSelectableInputs');
@@ -52,6 +53,10 @@ const Library = ({ model }) => {
     const profile = useProfile();
     const notifications = useNotifications();
     const [library, loadNextPage] = useLibrary(model, urlParams, queryParams);
+    const [hideWatched] = useHideWatched();
+    const libraryItems = React.useMemo(() => {
+        return hideWatched ? library.catalog.filter((libItem) => libItem.watched !== true) : library.catalog;
+    }, [library.catalog, hideWatched]);
     const [typeSelect, sortChips, hasNextPage] = useSelectableInputs(library);
     const scrollContainerRef = React.useRef(null);
     const onScrollToBottom = React.useCallback(() => {
@@ -104,7 +109,7 @@ const Library = ({ model }) => {
                                     :
                                     <div ref={scrollContainerRef} className={classnames(styles['meta-items-container'], 'animation-fade-in')} onScroll={onScroll}>
                                         {
-                                            library.catalog.map((libItem, index) => (
+                                            libraryItems.map((libItem, index) => (
                                                 <LibItem
                                                     {...libItem}
                                                     key={index}
