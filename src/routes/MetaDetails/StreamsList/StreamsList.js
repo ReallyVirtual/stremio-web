@@ -8,12 +8,13 @@ const PropTypes = require('prop-types');
 const classnames = require('classnames');
 const { useTranslation } = require('react-i18next');
 const { default: Icon } = require('@stremio/stremio-icons/react');
-const { Button, Image, MultiselectMenu } = require('stremio/components');
+const { Button, Image, MultiselectMenu, RangeSlider } = require('stremio/components');
 const { useCore } = require('stremio/core');
 const Stream = require('./Stream');
 const styles = require('./styles');
 const { usePlatform, useProfile } = require('stremio/common');
 const { default: SeasonEpisodePicker } = require('../EpisodePicker');
+const { ANY_KEY, MULTI_LANGUAGE_KEY, SIZE_STOPS, SEEDS_STOPS, boundsToStops, collectLanguages, countActiveFilters, languageOptionLabel, matchesFilters, stopsToBounds, useStreamFilters } = require('./streamFilters');
 
 const ALL_ADDONS_KEY = 'ALL';
 
@@ -26,10 +27,31 @@ const StreamsList = ({ className, video, type, externalPlayerCallbackCanMarkWatc
     const goBack = useGoBack();
     const streamsContainerRef = React.useRef(null);
     const [selectedAddon, setSelectedAddon] = React.useState(ALL_ADDONS_KEY);
-    const onAddonSelected = React.useCallback((value) => {
-        streamsContainerRef.current.scrollTo({ top: 0, left: 0, behavior: platform.name === 'ios' ? 'smooth' : 'instant' });
-        setSelectedAddon(value);
+    const [streamFilters, updateStreamFilters] = useStreamFilters();
+    const scrollToTop = React.useCallback(() => {
+        streamsContainerRef.current?.scrollTo({ top: 0, left: 0, behavior: platform.name === 'ios' ? 'smooth' : 'instant' });
     }, [platform]);
+    const onAddonSelected = React.useCallback((value) => {
+        scrollToTop();
+        setSelectedAddon(value);
+    }, [scrollToTop]);
+    const onSizeChange = React.useCallback((range) => {
+        const [sizeMin, sizeMax] = stopsToBounds(SIZE_STOPS, range);
+        scrollToTop();
+        updateStreamFilters({ sizeMin, sizeMax });
+    }, [scrollToTop, updateStreamFilters]);
+    const onSeedsChange = React.useCallback((range) => {
+        const [seedsMin, seedsMax] = stopsToBounds(SEEDS_STOPS, range);
+        scrollToTop();
+        updateStreamFilters({ seedsMin, seedsMax });
+    }, [scrollToTop, updateStreamFilters]);
+    const toggleFiltersPanel = React.useCallback(() => {
+        updateStreamFilters({ panelOpen: !streamFilters.panelOpen });
+    }, [streamFilters.panelOpen, updateStreamFilters]);
+    const onLanguageSelected = React.useCallback((value) => {
+        scrollToTop();
+        updateStreamFilters({ language: value });
+    }, [scrollToTop, updateStreamFilters]);
     const showInstallAddonsButton = React.useMemo(() => {
         return !profile || profile.auth === null || profile.auth?.user?.isNewUser === true && !video?.upcoming;
     }, [profile, video]);
@@ -80,12 +102,55 @@ const StreamsList = ({ className, video, type, externalPlayerCallbackCanMarkWatc
             }, {});
     }, [props.streams, profile.settings.playerType]);
     const effectiveSelectedAddon = Object.prototype.hasOwnProperty.call(streamsByAddon, selectedAddon) ? selectedAddon : ALL_ADDONS_KEY;
+    const hasStreams = Object.keys(streamsByAddon).length > 0;
     const filteredStreams = React.useMemo(() => {
         return effectiveSelectedAddon === ALL_ADDONS_KEY ?
             Object.values(streamsByAddon).map(({ streams }) => streams).flat(1)
             :
             streamsByAddon[effectiveSelectedAddon].streams;
     }, [streamsByAddon, effectiveSelectedAddon]);
+    const streamLanguages = React.useMemo(() => collectLanguages(filteredStreams), [filteredStreams]);
+    const effectiveStreamFilters = React.useMemo(() => ({
+        ...streamFilters,
+        language: streamLanguages.includes(streamFilters.language) ? streamFilters.language : ANY_KEY
+    }), [streamFilters, streamLanguages]);
+    const visibleStreams = React.useMemo(() => {
+        return filteredStreams.filter((stream) => matchesFilters(stream, effectiveStreamFilters));
+    }, [filteredStreams, effectiveStreamFilters]);
+    const hiddenStreamsCount = filteredStreams.length - visibleStreams.length;
+    const activeFiltersCount = countActiveFilters(effectiveStreamFilters);
+    const sizeRange = React.useMemo(() => {
+        return boundsToStops(SIZE_STOPS, streamFilters.sizeMin, streamFilters.sizeMax);
+    }, [streamFilters.sizeMin, streamFilters.sizeMax]);
+    const seedsRange = React.useMemo(() => {
+        return boundsToStops(SEEDS_STOPS, streamFilters.seedsMin, streamFilters.seedsMax);
+    }, [streamFilters.seedsMin, streamFilters.seedsMax]);
+    const formatSizeStop = React.useCallback((index) => {
+        return SIZE_STOPS[index] === Infinity ? '∞' : `${SIZE_STOPS[index]} GB`;
+    }, []);
+    const formatSeedsStop = React.useCallback((index) => {
+        return SEEDS_STOPS[index] === Infinity ? '∞' : `${SEEDS_STOPS[index]}`;
+    }, []);
+    const formatRange = React.useCallback((stops, [low, high], format) => {
+        return low === 0 && high === stops.length - 1 ?
+            t('STREAMS_FILTER_ANY', { defaultValue: 'Any' })
+            :
+            `${format(low)} – ${format(high)}`;
+    }, [t]);
+    const languageOptions = React.useMemo(() => ({
+        options: [
+            { value: ANY_KEY, label: t('STREAMS_FILTER_LANGUAGE_ANY', { defaultValue: 'Any language' }), title: t('STREAMS_FILTER_LANGUAGE_ANY', { defaultValue: 'Any language' }) },
+            ...streamLanguages.map((language) => {
+                const label = language === MULTI_LANGUAGE_KEY ?
+                    `🌐 ${t('STREAMS_FILTER_LANGUAGE_MULTI', { defaultValue: 'Multi-language' })}`
+                    :
+                    languageOptionLabel(language);
+                return { value: language, label, title: label };
+            })
+        ],
+        value: effectiveStreamFilters.language,
+        onSelect: onLanguageSelected
+    }), [streamLanguages, effectiveStreamFilters.language, onLanguageSelected, t]);
     const selectableOptions = React.useMemo(() => {
         return {
             options: [
@@ -136,7 +201,64 @@ const StreamsList = ({ className, video, type, externalPlayerCallbackCanMarkWatc
                         :
                         null
                 }
+                {
+                    hasStreams ?
+                        <Button className={classnames(styles['button-container'], styles['filters-button-container'], { 'active': streamFilters.panelOpen })} title={t('STREAMS_FILTERS', { defaultValue: 'Filters' })} tabIndex={0} onClick={toggleFiltersPanel}>
+                            <Icon className={styles['icon']} name={'filters-outline'} />
+                            {
+                                activeFiltersCount > 0 ?
+                                    <div className={styles['badge']}>{activeFiltersCount}</div>
+                                    :
+                                    null
+                            }
+                        </Button>
+                        :
+                        null
+                }
             </div>
+            {
+                streamFilters.panelOpen && hasStreams ?
+                    <div className={styles['filters-panel']}>
+                        <div className={styles['filter-row']}>
+                            <div className={styles['filter-label']}>{t('STREAMS_FILTER_SIZE', { defaultValue: 'Size' })}</div>
+                            <RangeSlider
+                                className={styles['filter-slider']}
+                                min={0}
+                                max={SIZE_STOPS.length - 1}
+                                value={sizeRange}
+                                formatValue={formatSizeStop}
+                                onChange={onSizeChange}
+                            />
+                            <div className={styles['filter-value']}>{formatRange(SIZE_STOPS, sizeRange, formatSizeStop)}</div>
+                        </div>
+                        <div className={styles['filter-row']}>
+                            <div className={styles['filter-label']}>{t('STREAMS_FILTER_SEEDS', { defaultValue: 'Seeds' })}</div>
+                            <RangeSlider
+                                className={styles['filter-slider']}
+                                min={0}
+                                max={SEEDS_STOPS.length - 1}
+                                value={seedsRange}
+                                formatValue={formatSeedsStop}
+                                onChange={onSeedsChange}
+                            />
+                            <div className={styles['filter-value']}>{formatRange(SEEDS_STOPS, seedsRange, formatSeedsStop)}</div>
+                        </div>
+                        {
+                            streamLanguages.length > 0 ?
+                                <div className={styles['filter-row']}>
+                                    <div className={styles['filter-label']}>{t('STREAMS_FILTER_LANGUAGE', { defaultValue: 'Language' })}</div>
+                                    <MultiselectMenu
+                                        {...languageOptions}
+                                        className={styles['filter-input-container']}
+                                    />
+                                </div>
+                                :
+                                null
+                        }
+                    </div>
+                    :
+                    null
+            }
             {
                 props.streams.length === 0 ?
                     <div className={styles['message-container']}>
@@ -182,7 +304,7 @@ const StreamsList = ({ className, video, type, externalPlayerCallbackCanMarkWatc
                             :
                             <React.Fragment>
                                 <div className={styles['streams-container']} ref={streamsContainerRef}>
-                                    {filteredStreams.map((stream, index) => (
+                                    {visibleStreams.map((stream, index) => (
                                         <Stream
                                             key={index}
                                             videoId={video?.id}
@@ -203,6 +325,14 @@ const StreamsList = ({ className, video, type, externalPlayerCallbackCanMarkWatc
                                                 <Icon className={styles['icon']} name={'addons'} />
                                                 <div className={styles['label']}>{t('ADDON_CATALOGUE_MORE')}</div>
                                             </Button>
+                                            :
+                                            null
+                                    }
+                                    {
+                                        hiddenStreamsCount > 0 ?
+                                            <div className={styles['hidden-streams']}>
+                                                {t('STREAMS_FILTER_HIDDEN', { defaultValue: '{{count}} streams hidden by the filters', count: hiddenStreamsCount })}
+                                            </div>
                                             :
                                             null
                                     }

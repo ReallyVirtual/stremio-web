@@ -1,0 +1,53 @@
+// Copyright (C) 2017-2026 Smart code 203358507
+
+.range-slider {
+    --track-size: 0.3rem;
+    --thumb-size: 1.1rem;
+
+    position: relative;
+    height: var(--thumb-size);
+    overflow: visible;
+    cursor: pointer;
+    touch-action: none;
+
+    &.disabled {
+        pointer-events: none;
+        opacity: 0.5;
+    }
+
+    .track {
+        position: absolute;
+        top: 50%;
+        left: 0;
+        right: 0;
+        height: var(--track-size);
+        border-radius: var(--track-size);
+        transform: translateY(-50%);
+        background-color: var(--primary-accent-color);
+        opacity: 0.2;
+    }
+
+    .track-selected {
+        position: absolute;
+        top: 50%;
+        height: var(--track-size);
+        border-radius: var(--track-size);
+        transform: translateY(-50%);
+        background-color: var(--primary-foreground-color);
+    }
+
+    .thumb {
+        position: absolute;
+        top: 50%;
+        width: var(--thumb-size);
+        height: var(--thumb-size);
+        border-radius: 100%;
+        transform: translate(-50%, -50%);
+        background-color: var(--primary-foreground-color);
+        outline: none;
+
+        &:focus-visible {
+            outline: var(--focus-outline-size) solid var(--primary-accent-color);
+        }
+    }
+}

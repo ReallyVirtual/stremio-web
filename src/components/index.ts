@@ -26,6 +26,7 @@ import MultiselectMenu from './MultiselectMenu';
 import { HorizontalNavBar, VerticalNavBar } from './NavBar';
 import NumberInput from './NumberInput';
 import Popup from './Popup';
+import RangeSlider from './RangeSlider';
 import RadioButton from './RadioButton';
 import SearchBar from './SearchBar';
 import SharePrompt from './SharePrompt';
@@ -66,6 +67,7 @@ export {
     VerticalNavBar,
     NumberInput,
     Popup,
+    RangeSlider,
     RadioButton,
     SearchBar,
     SharePrompt,
