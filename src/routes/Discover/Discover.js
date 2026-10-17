@@ -98,6 +98,7 @@ const Discover = () => {
     const metasContainerRef = React.useRef();
     const metaPreviewRef = React.useRef();
     const previousCatalogSizeRef = React.useRef(0);
+    const previousVisibleSizeRef = React.useRef(0);
 
     const [selectedEpgProgram, setSelectedEpgProgram] = React.useState(null);
     const [epgPreviewOpen, openEpgPreview, closeEpgPreviewModal] = useBinaryState(false);
@@ -120,14 +121,21 @@ const Discover = () => {
         if (!isEpgLayout && discover.catalog?.content.type === 'Loading' && metasContainerRef.current) {
             metasContainerRef.current.scrollTop = 0;
             previousCatalogSizeRef.current = 0;
+            previousVisibleSizeRef.current = 0;
         }
     }, [discover.catalog, isEpgLayout]);
+    // Fill the viewport: load the next page while the grid is too short to scroll. Hiding
+    // watched items shortens it too (a page may even be entirely watched), so a drop in
+    // the visible count triggers the same check as newly loaded items.
     React.useEffect(() => {
         if (!isEpgLayout && discover.catalog?.content.type === 'Ready') {
             const catalogSize = discover.catalog.content.content.length;
+            const visibleSize = metaItems.length;
             const hasNewItems = catalogSize > previousCatalogSizeRef.current;
+            const hasFewerVisible = visibleSize < previousVisibleSizeRef.current;
             previousCatalogSizeRef.current = catalogSize;
-            if (!hasNextPage || !hasNewItems || !metasContainerRef.current) {
+            previousVisibleSizeRef.current = visibleSize;
+            if (!hasNextPage || !(hasNewItems || hasFewerVisible) || !metasContainerRef.current) {
                 return;
             }
 
@@ -137,7 +145,7 @@ const Discover = () => {
                 loadNextPage();
             }
         }
-    }, [discover.catalog, isEpgLayout, hasNextPage, loadNextPage]);
+    }, [discover.catalog, metaItems, isEpgLayout, hasNextPage, loadNextPage]);
     const addToLibrary = React.useCallback(() => {
         if (selectedMetaItem === null) {
             return;
