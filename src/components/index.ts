@@ -26,6 +26,7 @@ import MultiselectMenu from './MultiselectMenu';
 import { HorizontalNavBar, VerticalNavBar } from './NavBar';
 import NumberInput from './NumberInput';
 import Popup from './Popup';
+import RangeSlider from './RangeSlider';
 import RadioButton from './RadioButton';
 import SearchBar from './SearchBar';
 import SharePrompt from './SharePrompt';
@@ -33,7 +34,6 @@ import Slider from './Slider';
 import ShortcutsGroup from './ShortcutsGroup';
 import TextInput from './TextInput';
 import Toggle from './Toggle';
-import RangeSlider from './RangeSlider';
 import Transition from './Transition';
 import UpdateBanner from './UpdateBanner';
 import Video from './Video';
@@ -67,6 +67,7 @@ export {
     VerticalNavBar,
     NumberInput,
     Popup,
+    RangeSlider,
     RadioButton,
     SearchBar,
     SharePrompt,
@@ -74,7 +75,6 @@ export {
     ShortcutsGroup,
     TextInput,
     Toggle,
-    RangeSlider,
     Transition,
     UpdateBanner,
     Video,

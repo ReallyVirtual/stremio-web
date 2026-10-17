@@ -102,6 +102,7 @@ const StreamsList = ({ className, video, type, externalPlayerCallbackCanMarkWatc
             }, {});
     }, [props.streams, profile.settings.playerType]);
     const effectiveSelectedAddon = Object.prototype.hasOwnProperty.call(streamsByAddon, selectedAddon) ? selectedAddon : ALL_ADDONS_KEY;
+    const hasStreams = Object.keys(streamsByAddon).length > 0;
     const filteredStreams = React.useMemo(() => {
         return effectiveSelectedAddon === ALL_ADDONS_KEY ?
             Object.values(streamsByAddon).map(({ streams }) => streams).flat(1)
@@ -201,7 +202,7 @@ const StreamsList = ({ className, video, type, externalPlayerCallbackCanMarkWatc
                         null
                 }
                 {
-                    Object.keys(streamsByAddon).length > 0 ?
+                    hasStreams ?
                         <Button className={classnames(styles['button-container'], styles['filters-button-container'], { 'active': streamFilters.panelOpen })} title={t('STREAMS_FILTERS', { defaultValue: 'Filters' })} tabIndex={0} onClick={toggleFiltersPanel}>
                             <Icon className={styles['icon']} name={'filters-outline'} />
                             {
@@ -216,7 +217,7 @@ const StreamsList = ({ className, video, type, externalPlayerCallbackCanMarkWatc
                 }
             </div>
             {
-                streamFilters.panelOpen && Object.keys(streamsByAddon).length > 0 ?
+                streamFilters.panelOpen && hasStreams ?
                     <div className={styles['filters-panel']}>
                         <div className={styles['filter-row']}>
                             <div className={styles['filter-label']}>{t('STREAMS_FILTER_SIZE', { defaultValue: 'Size' })}</div>

@@ -71,14 +71,9 @@ const FLAG_LANGUAGES: Record<string, string> = {
     IL: 'he', IR: 'fa', TH: 'th', VN: 'vi', ID: 'id', MY: 'ms', PK: 'ur', BD: 'bn', BG: 'bg',
     HR: 'hr', RS: 'sr', SK: 'sk', SI: 'sl', LT: 'lt', LV: 'lv', EE: 'et',
 };
-// Flag shown next to a language in the dropdown: the first country listed for it above,
-// plus the Indian languages that have no country of their own in that table.
-const LANGUAGE_COUNTRIES: Record<string, string> = Object.entries(FLAG_LANGUAGES)
-    .reduce((countries, [country, language]) => ({ [language]: country, ...countries }), {
-        ta: 'IN', te: 'IN', ml: 'IN', kn: 'IN', mr: 'IN', pa: 'IN',
-    });
 const FLAG_PATTERN = /[\u{1F1E6}-\u{1F1FF}]{2}/gu;
 const REGIONAL_INDICATOR_BASE = 0x1F1E6;
+// Names of four letters or fewer (Ido, Ewe, Lao...) are too common in titles to match on.
 const SHORT_NAMES_ALLOWED = ['Thai', 'Urdu', 'Zulu'];
 const MULTI_PATTERN = /\bmulti(?:[ -]?(?:audio|lang(?:uage)?s?|sub(?:s|titles)?))?\b|\bdual[ -]?audio\b/i;
 const LANGUAGE_ALIASES: [RegExp, string][] = [
@@ -104,6 +99,13 @@ const countryToFlag = (country: string): string => {
         .map((char) => String.fromCodePoint(char.charCodeAt(0) - 65 + REGIONAL_INDICATOR_BASE))
         .join('');
 };
+
+// Flag shown next to a language in the dropdown: the first country listed for it in
+// FLAG_LANGUAGES, plus the Indian languages that have no entry of their own there.
+const LANGUAGE_FLAGS: Record<string, string> = Object.entries({
+    ...Object.fromEntries(Object.entries(FLAG_LANGUAGES).reverse().map(([country, language]) => [language, country])),
+    ta: 'IN', te: 'IN', ml: 'IN', kn: 'IN', mr: 'IN', pa: 'IN',
+}).reduce((flags, [language, country]) => ({ ...flags, [toLanguageCode(language)]: countryToFlag(country) }), {});
 
 const streamText = (stream: FilterableStream): string => {
     return `${stream.description ?? ''}\n${stream.name ?? ''}`;
@@ -169,14 +171,8 @@ export const collectLanguages = (streams: FilterableStream[]): string[] => {
     });
 };
 
-export const languageFlag = (language: string): string | null => {
-    const country = Object.entries(LANGUAGE_COUNTRIES)
-        .find(([alpha2]) => toLanguageCode(alpha2) === language)?.[1];
-    return country ? countryToFlag(country) : null;
-};
-
 export const languageOptionLabel = (language: string): string => {
-    const flag = languageFlag(language);
+    const flag = LANGUAGE_FLAGS[language];
     return flag ? `${flag} ${languageLabel(language)}` : languageLabel(language);
 };
 
